@@ -350,7 +350,6 @@ class IndexTTS2ResynthesisPipeline:
         style_embedding: Optional[torch.Tensor] = None,
         diffusion_kwargs: Optional[Dict[str, Any]] = None,
         crop_reference: bool = True,
-
     ) -> MelSynthesisResult:
         """Run the IndexTTS2 diffusion model to reconstruct mels.
 
@@ -400,6 +399,7 @@ class IndexTTS2ResynthesisPipeline:
             audio_target = audio_target.to(device)
             ref_mel = self._mel_fn(audio_target.float())
             ref_lengths = torch.LongTensor([ref_mel.size(2)]).to(device)
+            target_lengths = torch.LongTensor([ref_mel.size(2)]).to(device)
 
             if encoding.features is None:
                 raise ValueError("Semantic features are required to build the prompt condition.")
@@ -409,7 +409,8 @@ class IndexTTS2ResynthesisPipeline:
             )[0]
 
             target_condition = self.diffusion_model.models["length_regulator"](
-                semantic_embeddings, ylens=ref_lengths, n_quantizers=3, f0=None
+                semantic_embeddings, ylens=target_lengths, n_quantizers=3, f0=None
+
             )[0]
 
             if prompt_condition is not None:
@@ -443,6 +444,7 @@ class IndexTTS2ResynthesisPipeline:
             "ref_mel": ref_mel.detach().cpu(),
             "style": style.detach().cpu(),
             "condition_lengths": condition_lengths.cpu(),
+            "target_lengths": target_lengths.cpu(),
             "crop_reference": crop_reference,
             "diffusion_settings": {
                 "diffusion_steps": diffusion_steps,
@@ -489,16 +491,17 @@ class IndexTTS2ResynthesisPipeline:
 
         The method ties the stage-specific hooks together while keeping the
         plumbing explicit so that intermediate artefacts are readily
-        inspectable during development and testing. The diffusion stage keeps
-        the prompt portion of the mel spectrogram so that the reconstructed
-        waveform aligns sample-accurately with the reference audio.
+        inspectable during development and testing. The diffusion stage mirrors
+        :class:`IndexTTS2` by discarding the prompt portion of the mel
+        spectrogram so that the reconstructed waveform aligns with the
+        reference audio duration.
         """
 
         semantic = self.encode_semantics(audio_path)
         mel = self.semantic_to_mel(
             semantic,
             diffusion_kwargs=diffusion_kwargs,
-            crop_reference=False,
+            crop_reference=True,
         )
         waveform = self.mel_to_waveform(mel, chunking=vocoder_kwargs)
         return semantic, mel, waveform
