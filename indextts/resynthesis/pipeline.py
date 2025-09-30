@@ -350,6 +350,7 @@ class IndexTTS2ResynthesisPipeline:
         style_embedding: Optional[torch.Tensor] = None,
         diffusion_kwargs: Optional[Dict[str, Any]] = None,
         crop_reference: bool = True,
+
     ) -> MelSynthesisResult:
         """Run the IndexTTS2 diffusion model to reconstruct mels.
 
