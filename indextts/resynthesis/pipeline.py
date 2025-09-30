@@ -349,6 +349,8 @@ class IndexTTS2ResynthesisPipeline:
         prompt_condition: Optional[torch.Tensor] = None,
         style_embedding: Optional[torch.Tensor] = None,
         diffusion_kwargs: Optional[Dict[str, Any]] = None,
+        crop_reference: bool = True,
+
     ) -> MelSynthesisResult:
         """Run the IndexTTS2 diffusion model to reconstruct mels.
 
@@ -363,6 +365,12 @@ class IndexTTS2ResynthesisPipeline:
             Optional global style embedding derived from CAMPPlus.
         diffusion_kwargs:
             Model-specific overrides that control the sampling process.
+        crop_reference:
+            When ``True`` the prompt portion of the diffusion output is
+            removed to mirror the behaviour of :class:`IndexTTS2`. For
+            self-resynthesis tasks the prompt corresponds to the target
+            audio, so callers can disable the cropping to retain the
+            complete waveform.
         """
 
         if self.semantic_codec is None:
@@ -428,12 +436,14 @@ class IndexTTS2ResynthesisPipeline:
                 temperature=temperature,
                 inference_cfg_rate=inference_cfg_rate,
             )
-            mel = mel[:, :, ref_mel.size(-1) :]
+            if crop_reference:
+                mel = mel[:, :, ref_mel.size(-1) :]
 
         metadata_out = {
             "ref_mel": ref_mel.detach().cpu(),
             "style": style.detach().cpu(),
             "condition_lengths": condition_lengths.cpu(),
+            "crop_reference": crop_reference,
             "diffusion_settings": {
                 "diffusion_steps": diffusion_steps,
                 "inference_cfg_rate": inference_cfg_rate,
@@ -479,11 +489,17 @@ class IndexTTS2ResynthesisPipeline:
 
         The method ties the stage-specific hooks together while keeping the
         plumbing explicit so that intermediate artefacts are readily
-        inspectable during development and testing.
+        inspectable during development and testing. The diffusion stage keeps
+        the prompt portion of the mel spectrogram so that the reconstructed
+        waveform aligns sample-accurately with the reference audio.
         """
 
         semantic = self.encode_semantics(audio_path)
-        mel = self.semantic_to_mel(semantic, diffusion_kwargs=diffusion_kwargs)
+        mel = self.semantic_to_mel(
+            semantic,
+            diffusion_kwargs=diffusion_kwargs,
+            crop_reference=False,
+        )
         waveform = self.mel_to_waveform(mel, chunking=vocoder_kwargs)
         return semantic, mel, waveform
 
