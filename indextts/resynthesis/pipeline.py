@@ -410,6 +410,7 @@ class IndexTTS2ResynthesisPipeline:
 
             target_condition = self.diffusion_model.models["length_regulator"](
                 semantic_embeddings, ylens=target_lengths, n_quantizers=3, f0=None
+
             )[0]
 
             if prompt_condition is not None:
